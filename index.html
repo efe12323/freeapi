@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TC Kimlik No ile Sorgu</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 80%;
+            margin: 50px auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            font-size: 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        .result {
+            margin-top: 30px;
+        }
+        .result p {
+            margin: 5px 0;
+        }
+        .result pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>TC Kimlik No ile Sorgu</h1>
+        <p>Admin44 Ücretsiz Rapor API</p>
+
+        <div class="form-group">
+            <label for="tcno">TC Kimlik No:</label>
+            <input type="text" id="tcno" placeholder="TC Kimlik No girin">
+        </div>
+
+        <button onclick="sorgula()">Sorgula</button>
+
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        async function sorgula() {
+            const tcno = document.getElementById("tcno").value;
+            if (!tcno) {
+                alert("Lütfen TC Kimlik No girin!");
+                return;
+            }
+
+            const sowixApiUrl = `https://api.sowixvip.xyz/sowixapi/tcpro.php?tc=${tcno}`;
+            const onlinelbsApiUrl = "http://95.0.185.19:64428/online-web/onlinelbs/checkLogin.html";
+
+            try {
+                // Sowix API'ye istek atma
+                const sowixResponse = await fetch(sowixApiUrl);
+                const sowixData = await sowixResponse.json();
+
+                if (!sowixData.success) {
+                    document.getElementById("result").innerHTML = "TC Kimlik No geçersiz!";
+                    return;
+                }
+
+                const dogumTarihi = sowixData.data.DOGUMTARIHI;
+                const dogumTarihiObj = new Date(dogumTarihi);
+                const dogumTarihiStr = `${dogumTarihiObj.getDate().toString().padStart(2, '0')}.${(dogumTarihiObj.getMonth() + 1).toString().padStart(2, '0')}.${dogumTarihiObj.getFullYear()}`;
+
+                // OnlineLbs API'ye istek atma
+                const payload = new URLSearchParams({
+                    recaptchaRes: 'dummyRecaptchaResponse',
+                    OnlineLbsTcNo: tcno,
+                    OnlineLbsDogumTarihi: dogumTarihiStr,
+                    OnlineLbsDosyaNo: '',
+                    OnlineLbsSonucNo: ''
+                });
+
+                const onlineResponse = await fetch(onlinelbsApiUrl, {
+                    method: 'POST',
+                    body: payload
+                });
+
+                const onlineData = await onlineResponse.text();
+
+                // JSON verisini düzgün metin formatında düzenleme
+                let metin = "Veri alınamadı.";
+                try {
+                    const responseJson = JSON.parse(onlineData);
+                    if (responseJson.durum === "ok") {
+                        metin = responseJson.data.map(item => {
+                            return `
+                                TC Kimlik No: ${item.tckimlikNo || 'Bilgi Yok'}
+                                Kurum ID: ${item.kurumId || 'Bilgi Yok'}
+                                Kullanıcı Kodu: ${item.kullaniciKodu || 'Bilgi Yok'}
+                                Lab İstek ID: ${item.labIstekId || 'Bilgi Yok'}
+                                Genel Kurum ID: ${item.genKurumId || 'Bilgi Yok'}
+                                Açıklama: ${item.aciklama || 'Bilgi Yok'}
+                                Birim Adı: ${item.birimAdi || 'Bilgi Yok'}
+                                Doğum Tarihi: ${item.dogumTarihi || 'Bilgi Yok'}
+                                İsteyen Kullanıcı ID: ${item.isteyenKullaniciId || 'Bilgi Yok'}
+                                Hasta Adı Soyadı: ${item.hastaAdiSoyadi || 'Bilgi Yok'}
+                                Doktor Adı: ${item.doktorAdi || 'Bilgi Yok'}
+                                Genel Kurum Adı: ${item.genKurumAdi || 'Bilgi Yok'}
+                                Telefon: ${item.telefon || 'Bilgi Yok'}
+                                ---------------------------------
+                            `;
+                        }).join('\n');
+                    }
+                } catch (error) {
+                    metin = "API'den geçersiz veri alındı.";
+                }
+
+                document.getElementById("result").innerHTML = `
+                    <p><strong>Ad:</strong> ${sowixData.data.AD}</p>
+                    <p><strong>Soyad:</strong> ${sowixData.data.SOYAD}</p>
+                    <p><strong>Doğum Tarihi:</strong> ${sowixData.data.DOGUMTARIHI}</p>
+                    <p><strong>Adres:</strong> ${sowixData.data.ADRESIL} / ${sowixData.data.ADRESILCE}</p>
+                    <p><strong>Cinsiyet:</strong> ${sowixData.data.CINSIYET}</p>
+                    <pre>${metin}</pre>
+                `;
+            } catch (error) {
+                document.getElementById("result").innerHTML = "Bir hata oluştu: " + error;
+            }
+        }
+    </script>
+
+</body>
+</html>
+
